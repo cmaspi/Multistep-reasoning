@@ -170,7 +170,8 @@ def run_model(model,
               input_string,
               generator_options,
               output_prefix_string=None,
-              output_scores=False):
+              output_scores=False,
+              return_eigenScore=False):
     import torch
     with torch.no_grad():
         input_ids = model['tokenizer'].encode(input_string,
@@ -190,9 +191,10 @@ def run_model(model,
             decoder_input_ids = {"decoder_input_ids": decoder_input_ids}
 
         # generate K outputs
-        K = 10
-        generator_options['num_return_sequences'] = K
-        generator_options['num_beams'] = K
+        if return_eigenScore:
+            K = 10
+            generator_options['num_return_sequences'] = K
+            generator_options['num_beams'] = K
         # generator_options['output_hidden_states'] = True
         output = model['model'].generate(encoder_outputs=encoder_outputs,
                                          **decoder_input_ids,
@@ -221,21 +223,23 @@ def run_model(model,
             output_token_probs.append(token_probs)
             res["output_token_probs_list"] = output_token_probs
 
-        # eigen score computation
-        # we want to use the activation at the last token
-        # in the middle layer that is indexed by 12
-        # the first axis in output.decoder_hidden_states is the token number
-        # the second axis is the layer number
-        # then we get a tensor of dim (K, 1, 1024)
-        hidden_states = output.decoder_hidden_states
-        Z = hidden_states[-1][12][:, 0, :]
-        Z /= torch.linalg.norm(Z, axis=1).unsqueeze(1)
-        one_tensor = torch.ones((1024, 1))
-        J = torch.eye(1024) - (1 / 1024) * one_tensor @ one_tensor.T
+        if return_eigenScore:
+            # eigen score computation
+            # we want to use the activation at the last token
+            # in the middle layer that is indexed by 12
+            # the first axis in output.decoder_hidden_states is the token number
+            # the second axis is the layer number
+            # then we get a tensor of dim (K, 1, 1024)
+            hidden_states = output.decoder_hidden_states
+            Z = hidden_states[-1][12][:, 0, :]
+            Z /= torch.linalg.norm(Z, axis=1).unsqueeze(1)
+            one_tensor = torch.ones((1024, 1))
+            J = torch.eye(1024) - (1 / 1024) * one_tensor @ one_tensor.T
 
-        mat = Z @ J @ Z.T + 1e-3 * torch.eye(K)
-        eigenScore = 1 / K * torch.log2(torch.linalg.det(mat))
-    return res, eigenScore
+            mat = Z @ J @ Z.T + 1e-3 * torch.eye(K)
+            eigenScore = 1 / K * torch.log2(torch.linalg.det(mat))
+            return res, eigenScore
+        return res, 0
 
 
 # Run model in forced generation mode, capturing each token probability
@@ -359,7 +363,8 @@ class MultiAngleModel():
                 self.model,
                 input_string,
                 generator_options,
-                output_prefix_string=output_prefix_string)
+                output_prefix_string=output_prefix_string,
+                return_eigenScore=True if outputs == 'proof' else False)
             res_slots = decompose_slots(res['output_raw_list'][0])
             full_res.update(res_slots)
             if explicit_outputs:
