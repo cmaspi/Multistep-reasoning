@@ -194,8 +194,12 @@ def run_model(model,
         if return_eigenScore:
             K = 10
             generator_options['num_return_sequences'] = K
-            generator_options['num_beams'] = K
-        # generator_options['output_hidden_states'] = True
+            # generator_options['num_beams'] = K
+            generator_options['do_sample'] = True
+            generator_options['top_k'] = 5
+            generator_options['top_p'] = 0.99
+            generator_options['temperature'] = 0.5
+
         output = model['model'].generate(encoder_outputs=encoder_outputs,
                                          **decoder_input_ids,
                                          output_hidden_states=True,
@@ -206,6 +210,8 @@ def run_model(model,
         output_strings = model['tokenizer'].batch_decode(
             output.sequences, skip_special_tokens=True)
         res = {"input_raw": input_string, "output_raw_list": output_strings}
+        print(res)
+        print(output.sequences.shape)
         if output_scores:
             # Subtract pad token if output_prefix not given
             num_prefix_tokens = len(
@@ -235,7 +241,7 @@ def run_model(model,
             Z /= torch.linalg.norm(Z, axis=1).unsqueeze(1)
             one_tensor = torch.ones((1024, 1))
             J = torch.eye(1024) - (1 / 1024) * one_tensor @ one_tensor.T
-
+            print(Z)
             mat = Z @ J @ Z.T + 1e-3 * torch.eye(K)
             eigenScore = 1 / K * torch.log2(torch.linalg.det(mat))
             return res, eigenScore
