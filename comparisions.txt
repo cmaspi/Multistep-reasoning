@@ -9,7 +9,11 @@
 {'Pred': {'premises': {}, 'entail_score': 0}, 'Actual': {'premises': {'A spa trip is a kind of vacation.': 0.9970372326588194, 'Vacations are good for improving health.': 0.9771678922005571}, 'entail_score': 0.7765902585057582}}
 {'Pred': {'premises': {'Some animals enjoy eating meat.': 0.9931773859562082, 'A rabbit is a kind of animal.': 0.9996690821859394}, 'entail_score': 0.9874518636899655}, 'Actual': {'premises': {'A rabbit is a kind of animal.': 0.9996690821859394, 'Animals enjoy eating the food they like.': 0.9984275430153372}, 'entail_score': 0.8915221306789001}}
 {'Pred': {'premises': {'Friction causes the speed of an object to decrease.': 0.9948766070437036, 'A negative relationship causes the decrease of something.': 0.980171432359511}, 'entail_score': 0.6024112878923319}, 'Actual': {'premises': {}, 'entail_score': 0}}
+<<<<<<< HEAD
 {'Pred': {'premises': {}, 'entail_score': 0}, 'Actual': {'premises': {'The best method for detecting texture is feeling it.': 0.9955126075094181, ''Rubbing something can cause that something to change texture'.': 0.9454101047655519}, 'entail_score': 0.8243187440098962}}
+=======
+{'Pred': {'premises': {}, 'entail_score': 0}, 'Actual': {'premises': {'The best method for detecting texture is feeling it.': 0.9955126075094181, 'Rubbing something can cause that something to change texture.': 0.9454101047655519}, 'entail_score': 0.8243187440098962}}
+>>>>>>> 48e60d7e188c6c2a80b157176602314dba777ea8
 {'Pred': {'premises': {'Cold-blooded animals are often slow.': 0.9045642634515064, 'The opposite of warm-blooded is cold-blooded.': 0.9719665325376755}, 'entail_score': 0.9979875998050427}, 'Actual': {'premises': {}, 'entail_score': 0}}
 {'Pred': {'premises': {'Banging on a drum causes sound to be produced.': 0.9995216229901529, 'Loud sound is a kind of sound.': 0.9987929056372543}, 'entail_score': 0.9952491086168199}, 'Actual': {'premises': {'Banging on a drum causes reverberations.': 0.9857904764713576, 'Reverberations can strike the eardrum.': 0.6658147670182547}, 'entail_score': 0.9977567416906149}}
 {'Pred': {'premises': {}, 'entail_score': 0}, 'Actual': {'premises': {'The substance that best helps plants grow is water.': 0.9225494026027732, 'The formula of water is H2O.': 0.997757741068169}, 'entail_score': 0.9877455850056207}}
