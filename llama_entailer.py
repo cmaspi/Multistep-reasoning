@@ -4,20 +4,22 @@ from entailment_bank.utils.nlp_agent import MultiAngleModel, NlpAgent
 
 
 class llama_Entailer:
-    def __init__(self, model, prover, entail_verifier, truth_judge, truth_tokenizer, truth_device='cuda:7'):
+    def __init__(self, model, prover, entail_verifier, truth_judge, truth_tokenizer, info_judge, info_tokenizer, truth_device='cuda:7', info_device='cuda:8'):
         self.model = model
         self.prover = prover
         self.entail_verifier = entail_verifier
         self.truth_judge = truth_judge
         self.truth_tokenizer = truth_tokenizer
         self.truth_device = truth_device
+        self.info_judge = info_judge
+        self.info_tokenizer = info_tokenizer
+        self.info_device = info_device
         
-
     def truthfulness_score(self, prompt):
         device = self.truth_device
-        prompt = prompt+"\nTrue"
+        prompt = prompt+"\nTrue:"
         inputs = self.truth_tokenizer([prompt], return_tensors="pt").to(device)
-        outputs = self.truth_judge.generate(**inputs, output_scores=True, return_dict_in_generate=True, max_length=100)
+        outputs = self.truth_judge.generate(**inputs, output_scores=True, return_dict_in_generate=True, max_length=500)
         input_length = 1 if self.truth_judge.config.is_encoder_decoder else inputs.input_ids.shape[1]
         transition_scores = self.truth_judge.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
         generated_tokens = outputs.sequences[:,input_length:]
@@ -26,6 +28,24 @@ class llama_Entailer:
         if self.truth_tokenizer.decode(generated_tokens[0][0])=='yes':
             return score
         return 1.0-score
+    
+    def faithfulness_score(self, hyp, premises):
+        device = self.info_device
+        entail_score = 1
+        for premise in premises:
+            prompt = "Q: "+hyp+"\nA: "+premise+"\nHelpful:"
+            inputs = self.info_tokenizer([prompt], return_tensors="pt").to(device)
+            outputs = self.info_judge.generate(**inputs, output_scores=True, return_dict_in_generate=True, max_length=500)
+            input_length = 1 if self.info_judge.config.is_encoder_decoder else inputs.input_ids.shape[1]
+            transition_scores = self.info_judge.compute_transition_scores(outputs.sequences, outputs.scores, normalize_logits=True)
+            generated_tokens = outputs.sequences[:,input_length:]
+            score = transition_scores[0][0]
+            score = np.exp(score.numpy(force=True))
+            if self.info_tokenizer.decode(generated_tokens[0][0])=='yes':
+                entail_score *= score
+            else:
+                entail_score *= (1.0-score)
+        return entail_score
         
     def one_step(self, hyp, prover_prefix, k=1):
         """
@@ -45,8 +65,7 @@ class llama_Entailer:
             for j in range(len(premises)):
                 premise_score[j] = self.truthfulness_score(premises[j])
 
-            entail_res = self.entail_verifier({"hypothesis": hyp, "proof": proof})
-            entail_score = entail_res['output_prob'] if entail_res['implied']=='true' else 1-entail_res['output_prob']
+            entail_score = self.faithfulness_score(hyp, premises)
 
             if min(premise_score)<0.5 or entail_score<0.5:
                 continue
@@ -85,8 +104,7 @@ class llama_Entailer:
 
         premises = [x.strip() for x in P.split("[PREMISE]") if x.strip()]
 
-        ent_res = self.entail_verifier({"hypothesis": hyp, "proof":P})
-        entail_score = ent_res['output_prob'] if ent_res['implied']=='true' else 1-ent_res['output_prob']
+        entail_score = self.faithfulness_score(hyp, premises)
         
         p_tree = [None]*len(premises)
         p_score = [None]*len(premises)

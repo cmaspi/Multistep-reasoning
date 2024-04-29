@@ -8,6 +8,25 @@ class Entailer:
         self.prover = prover
         self.entail_verifier = entail_verifier
         self.hyp_verifier = hyp_verifier
+    
+    def truthfulness_score(self, prompt):
+        """
+        Get the truthfulness score of the given statement
+        """
+        res = self.hyp_verifier({"hypothesis": prompt})
+        score = res['output_prob'] if res['valid']=='true' else 1-res['output_prob']
+        return score
+    
+    def faithfulness_score(self, hyp, premises):
+        """
+        Get the faithfulness score og given premise with the given hypothesis
+        """
+        proof = ""
+        for premise in premises:
+            proof += f"[PREMISE] {premise}"
+        entail_res = self.entail_verifier({"hypothesis": hyp, "proof": proof})
+        entail_score = entail_res['output_prob'] if entail_res['implied']=='true' else 1-entail_res['output_prob']
+        return entail_score
         
     def one_step(self, hyp, k=5, prover_prefix=None, full_depth=False):
         """
@@ -25,12 +44,9 @@ class Entailer:
             premise_score = [None]*len(premises)
 
             for j in range(len(premises)):
-                ver_res = self.hyp_verifier({"hypothesis": premises[j]})
+                premise_score[j] = self.truthfulness_score(premises[j])
 
-                premise_score[j] = ver_res['output_prob'] if ver_res['valid']=='true' else 1-ver_res['output_prob']
-
-            entail_res = self.entail_verifier({"hypothesis": hyp, "proof": proof})
-            entail_score = entail_res['output_prob'] if entail_res['implied']=='true' else 1-entail_res['output_prob']
+            entail_score = self.faithfulness_score(hyp, premises)
 
             if not full_depth and (min(premise_score)<0.5 or entail_score<0.5):
                 continue
@@ -55,10 +71,8 @@ class Entailer:
         tree = {}
     
         visited[hyp] = True
-
-        hyp_res = self.hyp_verifier({"hypothesis":hyp})
         
-        sd_H = hyp_res['output_prob'] if hyp_res['valid']=='true' else 1-hyp_res['output_prob']
+        sd_H = self.truthfulness_score(hyp)
         cd_H = max(sd_H, 1-sd_H)
         
         if max_depth == 0:
@@ -71,8 +85,7 @@ class Entailer:
 
         premises = [x.strip() for x in P.split("[PREMISE]") if x.strip()]
 
-        ent_res = self.entail_verifier({"hypothesis": hyp, "proof":P})
-        entail_score = ent_res['output_prob'] if ent_res['implied']=='true' else 1-ent_res['output_prob']
+        entail_score = self.faithfulness_score(hyp, premises)
         
         p_tree = [None]*len(premises)
         p_score = [None]*len(premises)
@@ -101,8 +114,7 @@ class Entailer:
                     sr_H = sr_H*(premises_score**(1/c))
             else:
                 for i in range(len(premises)):
-                    p_res = self.hyp_verifier({"hypothesis":premises[i]})
-                    p_score[i] = p_res['output_prob'] if p_res['valid']=='true' else 1-p_res['output_prob']
+                    p_score[i] = self.truthfulness_score(premises[i])
                     prem_scores[premises[i]] = p_score[i]
                     
                 sr_H = 0

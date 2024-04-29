@@ -10,47 +10,23 @@ import time
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-SLOT_SHORTFORMS_DEFAULT = {
-    "Q": "question",
-    "C": "context",
-    "A": "answer",
-    "E": "explanation",
-    "M": "mcoptions",
-    "R": "rationale",
-    "P": "proof",
-    "H": "hypothesis",
-    "V": "valid"
-}
+SLOT_SHORTFORMS_DEFAULT = {"Q": "question", "C": "context", "A": "answer", "E": "explanation",
+                   "M": "mcoptions", "R": "rationale", "P": "proof", "H": "hypothesis", "V": "valid"}
 
-GENERATOR_OPTIONS_DEFAULT = {
-    "min_length": 1,
-    "max_length": 128,
-    "num_beams": 1,
-    "num_return_sequences": 1,
-    "do_sample": False,
-    "top_k": 50,
-    "top_p": 1.0,
-    "temperature": 1.0,
-    "length_penalty": 1.0,
-    "repetition_penalty": 1.0
-}
+GENERATOR_OPTIONS_DEFAULT = {"min_length": 1, "max_length": 128, "num_beams": 1, "num_return_sequences": 1,
+                             "do_sample": False, "top_k": 50, "top_p": 1.0, "temperature": 1.0,
+                             "length_penalty": 1.0, "repetition_penalty": 1.0}
 
-DEFAULT_SLOT_FORMAT = {
-    "slot": "$SLOT$",
-    "assign": " = ",
-    "separator": " ; ",
-    "missing_value": "N/A"
-}
+DEFAULT_SLOT_FORMAT = {"slot": "$SLOT$", "assign": " = ", "separator": " ; ", "missing_value": "N/A"}
 
 
 def decompose_slots(string, fmt=None):
     fmt = fmt or DEFAULT_SLOT_FORMAT
     string = string.strip()
     no_slot = "PREFIX"
-    slot_re = re.compile('(?i)' +
-                         re.escape(fmt['slot']).replace("SLOT", "(\\w*?)"))
-    assign_re = re.escape(fmt['assign']).replace('\\ ', '\\s*')
-    separator_re = re.escape(fmt['separator']).replace('\\ ', '\\s*')
+    slot_re = re.compile('(?i)'+re.escape(fmt['slot']).replace("SLOT", "(\\w*?)"))
+    assign_re = re.escape(fmt['assign']).replace('\\ ','\\s*')
+    separator_re = re.escape(fmt['separator']).replace('\\ ','\\s*')
     strip_re = re.compile(f"^({assign_re})?(.*?)({separator_re})?$")
     slot_pos = []
     for m in slot_re.finditer(string):
@@ -58,13 +34,13 @@ def decompose_slots(string, fmt=None):
     if len(slot_pos) == 0:
         return {no_slot: string}
     if slot_pos[0][0][0] > 0:
-        slot_pos = [((0, -1), no_slot)] + slot_pos
+        slot_pos = [((0,-1), no_slot)] + slot_pos
     res = {}
     for idx, (pos, slot_name) in enumerate(slot_pos):
         if idx == len(slot_pos) - 1:
-            value = string[pos[1] + 1:]
+            value = string[pos[1]+1:]
         else:
-            value = string[pos[1] + 1:slot_pos[idx + 1][0][0] - 1]
+            value = string[pos[1]+1:slot_pos[idx+1][0][0]-1]
         m = strip_re.match(value)
         if m is not None:
             value = m.group(2)
@@ -77,8 +53,8 @@ def decompose_slots(string, fmt=None):
 
 def split_mcoptions(mcoptions):
     first_option = ord(mcoptions.strip()[1])
-    labels = "".join([chr(x) for x in range(first_option, first_option + 10)])
-    choices = re.split("\\s*\\([" + labels + "]\\)\\s*", mcoptions)[1:]
+    labels = "".join([chr(x) for x in range(first_option, first_option+10)])
+    choices = re.split("\\s*\\(["+labels+"]\\)\\s*", mcoptions)[1:]
     return (choices, chr(first_option))
 
 
@@ -104,11 +80,7 @@ def make_input_string(fields, angle, fmt=None):
     return fmt['separator'].join(res)
 
 
-def make_api_input_string(fields,
-                          angle,
-                          slot_key_from_lowercase,
-                          explicit_outputs=None,
-                          output_prefix=None):
+def make_api_input_string(fields, angle, slot_key_from_lowercase, explicit_outputs=None, output_prefix=None):
     res = []
     for slot in angle[0]:
         slot_key = slot_key_from_lowercase.get(slot, slot[0].upper())
@@ -119,14 +91,15 @@ def make_api_input_string(fields,
     for slot in angle[1]:
         slot_key = slot_key_from_lowercase.get(slot, slot[0].upper())
         if output_prefix is not None and slot in output_prefix:
-            res.append(slot_key + "-prefix: " + output_prefix[slot])
+            res.append(slot_key +"-prefix: " + output_prefix[slot])
         else:
             res.append(slot_key)
     return "\n".join(res)
 
 
+
 # Load model and tokenizer, also return the cuda device used for input to model
-def load_model(model_name_or_path, cuda_devices=None):
+def load_model(model_name_or_path, cuda_devices = None):
     from transformers import T5Tokenizer, T5ForConditionalGeneration
 
     cuda_devices = cuda_devices or []
@@ -166,80 +139,36 @@ def load_model(model_name_or_path, cuda_devices=None):
 
 
 # Run model in free generation mode, with optional output_prefix_string
-def run_model(model,
-              input_string,
-              generator_options,
-              output_prefix_string=None,
-              output_scores=False,
-              return_eigenScore=False):
+def run_model(model, input_string, generator_options, output_prefix_string=None, output_scores=False):
     import torch
     with torch.no_grad():
-        input_ids = model['tokenizer'].encode(input_string,
-                                              return_tensors="pt").to(
-                                                  model['cuda_device'])
+        input_ids = model['tokenizer'].encode(input_string, return_tensors="pt").to(model['cuda_device'])
         encoder_outputs = model['model'].encoder(input_ids)
         decoder_input_ids = {}
         if output_prefix_string is not None:
-            decoder_start_token_id = model[
-                'model'].config.decoder_start_token_id
-            output_ids = model['tokenizer'].encode(output_prefix_string,
-                                                   return_tensors="pt",
-                                                   add_special_tokens=False)
-            decoder_input_ids = torch.cat((torch.LongTensor(
-                [[decoder_start_token_id] * len(output_ids)]), output_ids),
+            decoder_start_token_id = model['model'].config.decoder_start_token_id
+            output_ids = model['tokenizer'].encode(output_prefix_string, return_tensors="pt", add_special_tokens=False)
+            decoder_input_ids = torch.cat((torch.LongTensor([[decoder_start_token_id] * len(output_ids)]), output_ids),
                                           dim=1).to(model['cuda_device'])
             decoder_input_ids = {"decoder_input_ids": decoder_input_ids}
 
-        # generate K outputs
-        if return_eigenScore:
-            K = 10
-            generator_options['num_return_sequences'] = K
-            generator_options['num_beams'] = K
-        # generator_options['output_hidden_states'] = True
-        output = model['model'].generate(encoder_outputs=encoder_outputs,
-                                         **decoder_input_ids,
-                                         output_hidden_states=True,
-                                         output_scores=output_scores,
-                                         return_dict_in_generate=True,
-                                         **generator_options)
+        output = model['model'].generate(encoder_outputs=encoder_outputs, **decoder_input_ids,
+                                         output_scores=output_scores, return_dict_in_generate=True, **generator_options)
 
-        output_strings = model['tokenizer'].batch_decode(
-            output.sequences, skip_special_tokens=True)
+        output_strings = model['tokenizer'].batch_decode(output.sequences, skip_special_tokens=True)
         res = {"input_raw": input_string, "output_raw_list": output_strings}
         if output_scores:
             # Subtract pad token if output_prefix not given
-            num_prefix_tokens = len(
-                decoder_input_ids.get('decoder_input_ids', [0]))
+            num_prefix_tokens = len(decoder_input_ids.get('decoder_input_ids', [0]))
             output_token_probs = []
             for idx in range(len(output.sequences)):
                 token_probs = []
-                for token, scores in zip(
-                        output.sequences[idx][num_prefix_tokens:],
-                        output.scores):
+                for token, scores in zip(output.sequences[idx][num_prefix_tokens:], output.scores):
                     probs = torch.softmax(scores[idx], dim=0)
-                    token_probs.append(
-                        (model['tokenizer'].convert_ids_to_tokens(
-                            token.item()), probs[token].item()))
+                    token_probs.append((model['tokenizer'].convert_ids_to_tokens(token.item()), probs[token].item()))
             output_token_probs.append(token_probs)
             res["output_token_probs_list"] = output_token_probs
-
-        if return_eigenScore:
-            # eigen score computation
-            # we want to use the activation at the last token
-            # in the middle layer that is indexed by 12
-            # the first axis in output.decoder_hidden_states is the token number
-            # the second axis is the layer number
-            # then we get a tensor of dim (K, 1, 1024)
-            hidden_states = output.decoder_hidden_states
-            Z = hidden_states[-1][12][:, 0, :]
-            Z /= torch.linalg.norm(Z, axis=1).unsqueeze(1)
-            one_tensor = torch.ones((1024, 1))
-            J = torch.eye(1024) - (1 / 1024) * one_tensor @ one_tensor.T
-
-            mat = Z @ J @ Z.T + 1e-3 * torch.eye(K)
-            eigenScore = 1 / K * torch.log2(torch.linalg.det(mat))
-            return res, eigenScore
-        return res, 0
+    return res
 
 
 # Run model in forced generation mode, capturing each token probability
@@ -247,47 +176,29 @@ def run_model_with_outputs(model, input_string, output_texts, output_angle):
     import torch
     with torch.no_grad():
         input_string = input_string
-        input_ids = model['tokenizer'].encode(input_string,
-                                              return_tensors="pt").to(
-                                                  model['cuda_device'])
+        input_ids = model['tokenizer'].encode(input_string, return_tensors="pt").to(model['cuda_device'])
         # Compute encoder output once and reuse for each output text
         encoder_outputs = model['model'].encoder(input_ids)
         all_res = []
         for output_text in output_texts:
-            output_string = make_input_string({output_angle: output_text},
-                                              [[output_angle], []])
-            output_ids = model['tokenizer'].encode(output_string,
-                                                   return_tensors="pt").to(
-                                                       model['cuda_device'])
-            res = model['model'](encoder_outputs=encoder_outputs,
-                                 labels=output_ids,
-                                 return_dict=True)
+            output_string = make_input_string({output_angle: output_text}, [[output_angle], []])
+            output_ids = model['tokenizer'].encode(output_string, return_tensors="pt").to(model['cuda_device'])
+            res = model['model'](encoder_outputs=encoder_outputs, labels=output_ids, return_dict=True)
             res_softmax = torch.softmax(res.logits[0], dim=1)
-            raw_probs = [
-                x[y.item()].item()
-                for x, y in list(zip(res_softmax, output_ids[0]))
-            ]
+            raw_probs = [x[y.item()].item() for x,y in list(zip(res_softmax, output_ids[0]))]
             output_prob = 1
             for raw_prob in raw_probs:
                 output_prob *= raw_prob
             loss = res.loss.item()
             all_res.append({
-                "input_raw":
-                input_string,
-                "output_raw":
-                output_string,
-                "output_text":
-                output_text,
-                "loss":
-                loss,
-                "score":
-                math.exp(-loss),
-                "output_prob":
-                output_prob,
-                "output_token_probs":
-                raw_probs,
-                "output_tokens":
-                model['tokenizer'].convert_ids_to_tokens(output_ids[0])
+                "input_raw": input_string,
+                "output_raw": output_string,
+                "output_text": output_text,
+                "loss": loss,
+                "score": math.exp(-loss),
+                "output_prob": output_prob,
+                "output_token_probs": raw_probs,
+                "output_tokens": model['tokenizer'].convert_ids_to_tokens(output_ids[0])
             })
     return all_res
 
@@ -301,7 +212,6 @@ def make_mcoptions(choices, first_label='A'):
 
 # Interface to a multi-angle generative model, either by loading a model or calling an API
 class MultiAngleModel():
-
     def __init__(self,
                  model_path=None,
                  api_url=None,
@@ -311,14 +221,9 @@ class MultiAngleModel():
                  cuda_devices=None):
         assert model_path is not None or api_url is not None
         assert not (model_path is not None and api_url is not None)
-        self.slot_shortforms = new_dict_update(SLOT_SHORTFORMS_DEFAULT,
-                                               slot_shortforms)
-        self.slot_key_from_lowercase = {
-            v.lower(): k
-            for k, v in self.slot_shortforms.items()
-        }
-        self.generator_options = new_dict_update(GENERATOR_OPTIONS_DEFAULT,
-                                                 generator_options)
+        self.slot_shortforms = new_dict_update(SLOT_SHORTFORMS_DEFAULT, slot_shortforms)
+        self.slot_key_from_lowercase = {v.lower(): k for k, v in self.slot_shortforms.items()}
+        self.generator_options = new_dict_update(GENERATOR_OPTIONS_DEFAULT, generator_options)
         self.api_url = api_url
         self.model = None
         if model_path is not None:
@@ -326,8 +231,7 @@ class MultiAngleModel():
 
     def __call__(self, fields, inputs, outputs, options=None):
         options = options or {}
-        generator_options = new_dict_update(self.generator_options,
-                                            options.get('generator_options'))
+        generator_options = new_dict_update(self.generator_options, options.get('generator_options'))
         explicit_outputs = options.get('explicit_outputs')
         if explicit_outputs is True:
             # Automatically extract from mcoptions field
@@ -339,9 +243,7 @@ class MultiAngleModel():
         output_prefix_string = None
         if output_prefix is not None:
             if explicit_outputs is not None:
-                raise ValueError(
-                    "Cannot specify both 'explicit_outputs' and 'output_prefix'"
-                )
+                raise ValueError("Cannot specify both 'explicit_outputs' and 'output_prefix'")
             slots_prefix = []
             for slot in angle[1]:
                 if slot in output_prefix:
@@ -349,35 +251,22 @@ class MultiAngleModel():
                 else:
                     break
             if len(slots_prefix) != len(output_prefix):
-                raise ValueError(
-                    f"Slots in output_prefix ({output_prefix}) do not match initial slots in output slots ({angle[1]})"
-                )
-            output_prefix_string = make_input_string(output_prefix,
-                                                     [slots_prefix, []])
+                raise ValueError(f"Slots in output_prefix ({output_prefix}) do not match initial slots in output slots ({angle[1]})")
+            output_prefix_string = make_input_string(output_prefix, [slots_prefix, []])
         full_res = {}
         if options.get("debug"):
             full_res['debug'] = {}
         if self.model:
             input_string = make_input_string(fields, angle)
-            res, eigenScore = run_model(
-                self.model,
-                input_string,
-                generator_options,
-                output_prefix_string=output_prefix_string,
-                return_eigenScore=True if outputs == 'proof' else False)
+            res = run_model(self.model, input_string, generator_options, output_prefix_string=output_prefix_string)
             res_slots = decompose_slots(res['output_raw_list'][0])
             full_res.update(res_slots)
             if explicit_outputs:
                 output_slot = angle[1][0]
-                res_explicit = run_model_with_outputs(self.model, input_string,
-                                                      explicit_outputs,
-                                                      output_slot)
-                res_explicit.sort(key=lambda x: -x['output_prob'])
+                res_explicit = run_model_with_outputs(self.model, input_string, explicit_outputs, output_slot)
+                res_explicit.sort(key=lambda x:-x['output_prob'])
                 if options.get("debug"):
-                    full_res['debug'].update({
-                        "generated_output": res_slots,
-                        "explicit_outputs": res_explicit
-                    })
+                    full_res['debug'].update({"generated_output": res_slots, "explicit_outputs": res_explicit})
                 full_res[output_slot] = res_explicit[0]['output_text']
                 full_res['output_prob'] = res_explicit[0]['output_prob']
         else:
@@ -389,16 +278,9 @@ class MultiAngleModel():
                         v_new = 1 if v else 0
                     api_generator_options[k] = v_new
 
-            input_string = make_api_input_string(fields, angle,
-                                                 self.slot_key_from_lowercase,
-                                                 explicit_outputs,
-                                                 output_prefix)
+            input_string = make_api_input_string(fields, angle, self.slot_key_from_lowercase, explicit_outputs, output_prefix)
             try:
-                res_raw = requests.get(self.api_url,
-                                       params={
-                                           "input": input_string,
-                                           **api_generator_options
-                                       })
+                res_raw = requests.get(self.api_url, params={"input": input_string, **api_generator_options})
                 res = res_raw.json()
             except:
                 logger.warning(f"Failed API call to {self.api_url}")
@@ -409,22 +291,15 @@ class MultiAngleModel():
                 output_slot = angle[1][0]
                 res_explicit = res['explicit_outputs']
                 if options.get("debug"):
-                    full_res['debug'].update({
-                        "generated_output": res_slots,
-                        "explicit_outputs": res_explicit
-                    })
+                    full_res['debug'].update({"generated_output": res_slots, "explicit_outputs": res_explicit})
                 full_res[output_slot] = res_explicit[0]['output_text']
                 full_res['output_prob'] = res_explicit[0]['output_prob']
         if options.get("debug"):
-            full_res["debug"].update({
-                "raw_input": input_string,
-                "generator_options": generator_options
-            })
-        return full_res, eigenScore
+            full_res["debug"].update({"raw_input": input_string, "generator_options": generator_options})
+        return full_res
 
 
 class InformationRetriever():
-
     def __init__(self, api_url, max_retries=3):
         self.api_url = api_url
         self.max_retries = max_retries
@@ -441,23 +316,19 @@ class InformationRetriever():
                 res_raw = requests.post(self.api_url, json=fields)
                 res = {"retrievals": res_raw.json()}
             except:
-                logger.warning(
-                    f"Failed retriever API call to {self.api_url}, retry = {retry}"
-                )
-                time.sleep(2 ^ retry)
+                logger.warning(f"Failed retriever API call to {self.api_url}, retry = {retry}")
+                time.sleep(2^retry)
         if res is None:
             return {"error": f"Failed retriever API call to {self.api_url}"}
         return res
 
 
 class NlpAgent():
-
-    def __init__(
-            self,
-            model,
-            default_fields=None,  # These will be used as starting point for any input fields
-            default_outputs=None,
-            default_options=None):
+    def __init__(self,
+                 model,
+                 default_fields=None,     # These will be used as starting point for any input fields
+                 default_outputs=None,
+                 default_options=None):
         self.model = model
         self.default_fields = default_fields or {}
         self.default_outputs = default_outputs
@@ -474,12 +345,9 @@ class NlpAgent():
             options_full = self.default_options.copy()
             if options is not None:
                 options_full.update(options)
-        res, eigenScore = self.model(fields_full, inputs, outputs,
-                                     options_full)
+        res = self.model(fields_full, inputs, outputs, options_full)
         if "error" in res:
             return res
         if isinstance(outputs, str):
             res = res.get(outputs)
-        if self.default_outputs == "proof":
-            return res, eigenScore
         return res
